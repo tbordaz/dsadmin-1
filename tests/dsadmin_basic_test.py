@@ -2,9 +2,9 @@
 
 
 """
-import dsadmin
-from dsadmin import DSAdmin, Entry
-from dsadmin import NoSuchEntryError
+import lib389
+from lib389 import DSAdmin, Entry
+from lib389 import NoSuchEntryError
 import ldap
 from ldap import *
 

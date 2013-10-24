@@ -2,8 +2,8 @@
 """
 import ldap
 import os
-from dsadmin import DSAdmin, DN_CONFIG
-from dsadmin.tools import DSAdminTools
+from lib389 import DSAdmin, DN_CONFIG
+from lib389.tools import DSAdminTools
 from nose import *
 
 added_instances = []

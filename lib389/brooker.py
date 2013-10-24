@@ -13,14 +13,14 @@ import re
 import time
 
 
-from dsadmin._constants import *
-from dsadmin import Entry, DSAdmin
-from dsadmin.utils import normalizeDN, escapeDNValue, suffixfilt
-from dsadmin import (
+from lib389._constants import *
+from lib389 import Entry, DSAdmin
+from lib389.utils import normalizeDN, escapeDNValue, suffixfilt
+from lib389 import (
     NoSuchEntryError
 )
 
-from dsadmin._constants import (
+from lib389._constants import (
     DN_CHANGELOG,
     DN_MAPPING_TREE,
     DN_CHAIN, DN_LDBM,
@@ -31,8 +31,8 @@ from dsadmin._constants import (
     REPLICA_RDWR_TYPE
 )
 
-from dsadmin._replication import RUV, CSN
-from dsadmin._entry import FormatDict
+from lib389._replication import RUV, CSN
+from lib389._entry import FormatDict
 
 
 class Replica(object):
@@ -237,7 +237,7 @@ class Replica(object):
 
             Ex. replica.add(**{
                     'suffix': "dc=example,dc=com",
-                    'type'  : dsadmin.MASTER_TYPE,
+                    'type'  : lib389.MASTER_TYPE,
                     'binddn': "cn=replication manager,cn=config"
               })
              binddn
@@ -337,7 +337,7 @@ class Replica(object):
                             eg. '(cn=*example.it*)'
             @param attrs - attributes to retrieve
                             eg. use ['*'] for all, defaul is ['cn']
-            @param dn - return a list of dsadmin.Entry if dn=False
+            @param dn - return a list of lib389.Entry if dn=False
 
         """
         attrs = attrs or ['cn']
@@ -532,6 +532,7 @@ class Config(object):
             
             eg. set('passwordExp', 'on')
         """
+        self.log.debug("set(%r, %r)" % (key, value))
         return self.conn.modify(DN_CONFIG,
             [(ldap.MOD_REPLACE, key, value)])
             
@@ -539,28 +540,30 @@ class Config(object):
         """Get an attribute under cn=config"""
         return self.conn.getEntry(DN_CONFIG).__getattr__(key)
 
-    def loglevel(self, vals=None, replica=False, level='error'):
+    def loglevel(self, vals=(LOG_DEFAULT,), level='error', update=False):
         """Set the access or error log level.
-        @param vals - a list of log level codes (eg. dsadmin.LOG_*)
-        @param replica  -   True to enable replica logging
-        @param level    -   'access' or 'error'
+        @param vals - a list of log level codes (eg. lib389.LOG_*) 
+                      defaults to LOG_DEFAULT
+        @param level   -   'access' or 'error'
+        @param update  - False for replace (default), True for update
         
-        ex. loglevel([dsadmin.LOG_DEFAULT, dsadmin.LOG_ENTRY_PARSER])
-        TODO replace the replica param with the ability to update
-             logging stuff without dropping the existing
+        ex. loglevel([lib389.LOG_DEFAULT, lib389.LOG_ENTRY_PARSER])
         """
         level = 'nsslapd-%slog-level' % level
-        vals = vals or [0]
-        val = sum(vals)
-        
-        # eventually enable replica logging #TODO remove it
-        if replica:
-            val |=  LOG_REPLICA
-            
-        self.conn.modify_s(DN_CONFIG, [
-            (ldap.MOD_REPLACE, level, str(val))
-            ])
-        return val
+        assert len(vals) > 0, "set at least one log level"
+        tot = 0
+        for v in vals:
+            tot |= v
+
+        if update:
+            old = int(self.get(level))
+            tot |= old
+            self.log.debug("Update %s value: %r -> %r" % (level, old, tot))
+        else:
+            self.log.debug("Replace %s with value: %r" % (level, tot))
+
+        self.set(level, str(tot))
+        return tot
 
     def enable_ssl(self, secport=636, secargs=None):
         """Configure SSL support into cn=encryption,cn=config.

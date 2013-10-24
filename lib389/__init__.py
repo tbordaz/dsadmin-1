@@ -41,11 +41,11 @@ from ldap.cidict import cidict
 from ldap import LDAPError
 # file in this package
 
-from dsadmin._constants import *
-from dsadmin._entry import Entry
-from dsadmin._replication import CSN, RUV
-from dsadmin._ldifconn import LDIFConn
-from dsadmin.utils import (
+from lib389._constants import *
+from lib389._entry import Entry
+from lib389._replication import CSN, RUV
+from lib389._ldifconn import LDIFConn
+from lib389.utils import (
     isLocalHost, 
     is_a_dn, 
     normalizeDN, 
@@ -54,7 +54,7 @@ from dsadmin.utils import (
     )
 
 # mixin
-#from dsadmin.tools import DSAdminTools
+#from lib389.tools import DSAdminTools
 
 RE_DBMONATTR = re.compile(r'^([a-zA-Z]+)-([1-9][0-9]*)$')
 RE_DBMONATTRSUN = re.compile(r'^([a-zA-Z]+)-([a-zA-Z]+)$')
@@ -92,7 +92,7 @@ class  DsError(Error):
 
 
 def wrapper(f, name):
-    """Wrapper of all superclass methods using dsadmin.Entry.
+    """Wrapper of all superclass methods using lib389.Entry.
         @param f - DSAdmin method inherited from SimpleLDAPObject
         @param name - method to call
         
@@ -261,7 +261,7 @@ class DSAdmin(SimpleLDAPObject):
         self.simple_bind_s(self.binddn, self.bindpw)
 
     def __add_brookers__(self):
-        from dsadmin.brooker import (
+        from lib389.brooker import (
             Replica,
             Backend,
             Config)
@@ -269,7 +269,7 @@ class DSAdmin(SimpleLDAPObject):
         self.backend = Backend(self)
         self.config = Config(self)
     
-    def __init__(self, host='localhost', port=389, binddn='', bindpw='', nobind=False, sslport=0, verbose=False):  # default to anon bind
+    def __init__(self, host='localhost', port=389, binddn='', bindpw='', serverId=None, nobind=False, sslport=0, verbose=False):  # default to anon bind
         """We just set our instance variables and wrap the methods.
             The real work is done in the following methods, reused during
             instance creation & co.
@@ -289,6 +289,8 @@ class DSAdmin(SimpleLDAPObject):
         self.bindpw = bindpw
         self.nobind = nobind
         self.isLocal = isLocalHost(host)
+        self.serverId = serverId
+        
         #
         # dict caching DS structure
         #
@@ -311,6 +313,9 @@ class DSAdmin(SimpleLDAPObject):
             return "ldaps://%s:%d/" % (self.host, self.sslport)
         else:
             return "ldap://%s:%d/" % (self.host, self.port)
+        
+    def getServerId(self):
+        return self.serverId
 
     #
     # Get entries
@@ -567,7 +572,7 @@ class DSAdmin(SimpleLDAPObject):
             NOTE This won't create a suffix nor its related entry in 
                 the tree!!!
                 
-            XXX Deprecated! @see dsadmin.brooker.Backend.add
+            XXX Deprecated! @see lib389.brooker.Backend.add
             
         """
         return self.backend.add(suffix=suffix, binddn=binddn, bindpw=bindpw,
@@ -578,7 +583,7 @@ class DSAdmin(SimpleLDAPObject):
     def setupSuffix(self, suffix, bename, parent="", verbose=False):
         """Setup a suffix with the given backend-name.
 
-            XXX Deprecated! @see dsadmin.brooker.Backend.setup_mt
+            XXX Deprecated! @see lib389.brooker.Backend.setup_mt
 
         """
         return self.backend.setup_mt(suffix, bename, parent)
@@ -968,7 +973,7 @@ class DSAdmin(SimpleLDAPObject):
     def setupBindDN(self, binddn, bindpw, attrs=None):
         """ Return - eventually creating - a person entry with the given dn and pwd.
 
-            binddn can be a dsadmin.Entry
+            binddn can be a lib389.Entry
         """
         try:
             assert binddn
@@ -1259,6 +1264,8 @@ class DSAdmin(SimpleLDAPObject):
         # remove invalid arguments from replica.add
         for invalid_arg in 'type id bename'.split():
             del repArgs[invalid_arg]
+        if 'log' in repArgs:
+            del repArgs['log']
         
         ret = self.replica.add(**repArgs)
         if 'legacy' in repArgs:

@@ -17,6 +17,7 @@ except ImportError:
 
 import re
 import os
+import socket
 import logging
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
@@ -26,9 +27,9 @@ from socket import getfqdn
 
 from ldapurl import LDAPUrl
 import ldap
-import dsadmin
-from dsadmin import DN_CONFIG
-from dsadmin._constants import *
+import lib389
+from lib389 import DN_CONFIG
+from lib389._constants import *
 
 #
 # Decorator
@@ -123,7 +124,7 @@ def isLocalHost(host_name):
         Uses gethostbyname()
     """
     # first see if this is a "well known" local hostname
-    if host_name == 'localhost' or host_name == 'localhost.localdomain':
+    if host_name == 'localhost' or host_name == 'localhost.localdomain' or host_name == socket.gethostname():
         return True
 
     # first lookup ip addr
@@ -215,7 +216,7 @@ def getcfgdsuserdn(cfgdn, args):
     This may raise a file or LDAP exception.
     """
     # create a connection to the cfg ds
-    conn = dsadmin.DSAdmin(args['cfgdshost'], args['cfgdsport'], "", "")
+    conn = lib389.DSAdmin(args['cfgdshost'], args['cfgdsport'], "", "", None)
     # if the caller gave a password, but not the cfguser DN, look it up
     if 'cfgdspwd' in args and \
             ('cfgdsuser' not in args or not is_a_dn(args['cfgdsuser'])):
@@ -238,9 +239,9 @@ def getcfgdsuserdn(cfgdn, args):
             args['cfgdsuser'] = "uid=%s,ou=Administrators,ou=TopologyManagement,%s" % \
                 (args['cfgdsuser'], cfgdn)
         conn.unbind()
-        conn = dsadmin.DSAdmin(
+        conn = lib389.DSAdmin(
             args['cfgdshost'], args['cfgdsport'], args['cfgdsuser'],
-            args['cfgdspwd'])
+            args['cfgdspwd'], None)
     return conn
 
 
@@ -312,7 +313,7 @@ def getcfgdsinfo(new_instance_arguments):
     was not found or could not be open.  This assumes new_instance_arguments contains the sroot
     parameter for the server root path.  If successful, """
     try:
-        return new_instance_arguments['cfgdshost'], int(new_instance_arguments['cfgdsport']), dsadmin.CFGSUFFIX
+        return new_instance_arguments['cfgdshost'], int(new_instance_arguments['cfgdsport']), lib389.CFGSUFFIX
     except KeyError:  # if keys are missing...
         if new_instance_arguments['new_style']:
             return getnewcfgdsinfo(new_instance_arguments)
@@ -419,7 +420,7 @@ def formatInfData(args):
         
     """
     args = args.copy()
-    args['CFGSUFFIX'] = dsadmin.CFGSUFFIX
+    args['CFGSUFFIX'] = lib389.CFGSUFFIX
 
     content = (
     "[General]" "\n"

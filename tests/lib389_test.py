@@ -8,11 +8,11 @@ from config import *
 import ldap
 import time
 import sys
-import dsadmin
-from dsadmin import DSAdmin, Entry
-from dsadmin import NoSuchEntryError
-from dsadmin import utils
-from dsadmin.tools import DSAdminTools
+import lib389
+from lib389 import DSAdmin, Entry
+from lib389 import NoSuchEntryError
+from lib389 import utils
+from lib389.tools import DSAdminTools
 from subprocess import Popen
 
 
@@ -21,8 +21,8 @@ added_entries = None
 added_backends = None
 
 def harn_nolog():
-    conn.config.loglevel([dsadmin.LOG_DEFAULT])
-    conn.config.loglevel([dsadmin.LOG_DEFAULT], level='access')
+    conn.config.loglevel([lib389.LOG_DEFAULT])
+    conn.config.loglevel([lib389.LOG_DEFAULT], level='access')
 
 
 def setup():
@@ -76,7 +76,7 @@ def drop_backend(conn, suffix, bename=None, maxnum=50):
         
     assert bename, "Missing bename for %r" % suffix
     if not hasattr(bename, '__iter__'):
-        bename = [','.join(['cn=%s' % bename, dsadmin.DN_LDBM])]
+        bename = [','.join(['cn=%s' % bename, lib389.DN_LDBM])]
     for be in bename:
         log.debug("removing entry from %r" % be)
         leaves = [x.dn for x in conn.search_s(
@@ -156,7 +156,7 @@ def addreplica_write_test():
     }
     replica = {
         'suffix': 'o=%s' % name,
-        'type': dsadmin.MASTER_TYPE,
+        'type': lib389.MASTER_TYPE,
         'id': 124
     }
     replica.update(user)
@@ -189,7 +189,7 @@ def setupAgreement_test():
         #'bename': "userRoot",
         'binddn': "uid=rmanager,cn=config",
         'bindpw': "password",
-        'rtype': dsadmin.MASTER_TYPE,
+        'rtype': lib389.MASTER_TYPE,
         'rid': '1234'
     }
     conn.replica.add(**args)
@@ -201,7 +201,7 @@ def setupAgreement_test():
 
 def stop_start_test():
     # dunno why DSAdmin.start|stop writes to dirsrv error-log
-    conn.errlog = "/tmp/dsadmin-errlog"
+    conn.errlog = "/tmp/lib389-errlog"
     open(conn.errlog, "w").close()
     DSAdminTools.stop(conn)
     log.info("server stopped")
@@ -236,5 +236,5 @@ def setupSSL_test():
     Popen(cmd_mkcert.split(), stdin=open("/dev/urandom"), stderr=fd_null)
 
     log.info("Testing ssl configuration")
-    ssl_args.update({'dsadmin': conn})
+    ssl_args.update({'lib389': conn})
     DSAdminTools.setupSSL(**ssl_args)

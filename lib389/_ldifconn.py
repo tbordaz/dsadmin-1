@@ -1,7 +1,7 @@
 __all__ = ['LDIFConn']
 import ldif
-from dsadmin._entry import Entry
-from dsadmin.utils import normalizeDN
+from lib389._entry import Entry
+from lib389.utils import normalizeDN
 
 class LDIFConn(ldif.LDIFParser):
     def __init__(

@@ -18,18 +18,18 @@ from config import *
 import ldap
 import time
 import sys
-import dsadmin
-from dsadmin import DSAdmin, Entry
-from dsadmin import NoSuchEntryError
-from dsadmin import utils
-from dsadmin.tools import DSAdminTools
+import lib389
+from lib389 import DSAdmin, Entry
+from lib389 import NoSuchEntryError
+from lib389 import utils
+from lib389.tools import DSAdminTools
 from subprocess import Popen
 from random import randint
-from dsadmin.brooker import Replica
-from dsadmin import MASTER_TYPE, DN_MAPPING_TREE, DN_CHANGELOG
+from lib389.brooker import Replica
+from lib389 import MASTER_TYPE, DN_MAPPING_TREE, DN_CHANGELOG
 # Test harnesses
-from dsadmin_test import drop_backend, addbackend_harn
-from dsadmin_test import drop_added_entries
+from lib389_test import drop_backend, addbackend_harn
+from lib389_test import drop_added_entries
 
 conn = None
 added_entries = None
@@ -42,7 +42,7 @@ def setup():
     # uses an existing 389 instance
     # add a suffix
     # add an agreement
-    # This setup is quite verbose but to test dsadmin method we should
+    # This setup is quite verbose but to test lib389 method we should
     # do things manually. A better solution would be to use an LDIF.
     global conn
     conn = DSAdmin(**config.auth)
@@ -283,7 +283,7 @@ def setup_replica_test():
         'suffix': "o=testReplicaCreation",
         'binddn': DN_RMANAGER,
         'bindpw': "password",
-        'rtype': dsadmin.MASTER_TYPE,
+        'rtype': lib389.MASTER_TYPE,
         'rid': MOCK_REPLICA_ID
     }
     # create a replica entry
@@ -297,7 +297,7 @@ def setup_replica_hub_test():
         'suffix': "o=testReplicaCreation",
         'binddn': DN_RMANAGER,
         'bindpw': "password",
-        'rtype': dsadmin.HUB_TYPE,
+        'rtype': lib389.HUB_TYPE,
         'rid': MOCK_REPLICA_ID
     }
     # create a replica entry

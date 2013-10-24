@@ -22,10 +22,10 @@ import select
 import time
 import shutil
 
-import dsadmin
-from dsadmin import InvalidArgumentError
+import lib389
+from lib389 import InvalidArgumentError
 
-from dsadmin.utils import (
+from lib389.utils import (
     getcfgdsuserdn, 
     getcfgdsinfo, 
     getcfgdsuserdn, 
@@ -36,8 +36,8 @@ from dsadmin.utils import (
     update_admin_domain,getadminport,getdefaultsuffix,
     
     )
-from dsadmin._ldifconn import LDIFConn
-from dsadmin._constants import DN_DM
+from lib389._ldifconn import LDIFConn
+from lib389._constants import DN_DM
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -261,11 +261,11 @@ class DSAdminTools(object):
         
             See DSAdmin.configSSL for the secargs values
         """
-        e = dsadmin.configSSL(secport, secargs)
+        e = lib389.configSSL(secport, secargs)
         log.info("entry is %r" % [e])
         dn_config = e.dn
         # get our cert dir
-        e_config = dsadmin.getEntry(
+        e_config = lib389.getEntry(
             dn_config, ldap.SCOPE_BASE, '(objectclass=*)')
         certdir = e_config.getValue('nsslapd-certdir')
         # have to stop the server before replacing any security files
@@ -299,7 +299,10 @@ class DSAdminTools(object):
     @staticmethod
     def runInfProg(prog, content, verbose):
         """run a program that takes an .inf style file on stdin"""
-        cmd = [prog]
+        cmd = [ '/usr/bin/sudo' ]
+        cmd.append('/usr/bin/perl')
+        cmd.append( prog )
+        #cmd = [prog]
         if verbose:
             cmd.append('-ddd')
         else:
@@ -333,6 +336,17 @@ class DSAdminTools(object):
         return exitCode
 
     @staticmethod
+    def removeInstance(instance):
+        """run the remove instance command"""
+        cmd = "/usr/bin/sudo /usr/bin/perl /usr/sbin/remove-ds.pl -i slapd-%s" % instance
+        #print "running: %s " % cmd
+        try:
+            os.system(cmd)
+        except:
+            log.exception("error executing %r" % cmd)
+  
+    
+    @staticmethod
     def createInstance(args, verbose=0):
         """Create a new instance of directory server and return a connection to it.
 
@@ -363,7 +377,7 @@ class DSAdminTools(object):
         
         }        
         """
-        cfgdn = dsadmin.CFGSUFFIX
+        cfgdn = lib389.CFGSUFFIX
         isLocal = update_newhost_with_fqdn(args)
         
         # use prefix if binaries are relocated
@@ -435,8 +449,8 @@ class DSAdminTools(object):
 
         # try to connect with the given parameters
         try:
-            newconn = dsadmin.DSAdmin(args['newhost'], args['newport'],
-                              args['newrootdn'], args['newrootpw'])
+            newconn = lib389.DSAdmin(args['newhost'], args['newport'],
+                              args['newrootdn'], args['newrootpw'], args['newinstance'])
             newconn.isLocal = isLocal
             if args['have_admin'] and not args['setup_admin']:
                 newconn.asport = asport
@@ -501,8 +515,8 @@ class DSAdminTools(object):
             content = formatInfData(args)
             DSAdminTools.runInfProg(prog, content, verbose)
 
-        newconn = dsadmin.DSAdmin(args['newhost'], args['newport'],
-                          args['newrootdn'], args['newrootpw'])
+        newconn = lib389.DSAdmin(args['newhost'], args['newport'],
+                          args['newrootdn'], args['newrootpw'], args['newinstance'])
         newconn.isLocal = isLocal
         # Now the admin should have been created
         # but still I should have taken all the required infos
