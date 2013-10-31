@@ -222,7 +222,7 @@ class DSAdmin(SimpleLDAPObject):
     def __localinit__(self):
         uri = self.toLDAPURL()
 
-        self.__class__.__bases__[0].__init__(self, uri)
+        self._Superclass.__init__(self, uri)
         # see if binddn is a dn or a uid that we need to lookup
         if self.binddn and not is_a_dn(self.binddn):
             self.simple_bind_s("", "")  # anon
@@ -256,7 +256,7 @@ class DSAdmin(SimpleLDAPObject):
         
             @raise ldap.CONFIDENTIALITY_REQUIRED - missing TLS: 
         """
-        SimpleLDAPObject.__init__(self, self.toLDAPURL())
+        self._Superclass.__init__(self, self.toLDAPURL())
         #self.start_tls_s()
         self.simple_bind_s(self.binddn, self.bindpw)
 
@@ -280,6 +280,9 @@ class DSAdmin(SimpleLDAPObject):
              not create a new instance"""
         log.info("Initializing %s with %s:%s" % (self.__class__,
                  host, sslport or port))
+        # Take the superclass (useful for monkeypatch in unittest)
+        self._Superclass = self.__class__.__bases__[0]
+        
         self.__wrapmethods()
         self.verbose = verbose
         self.port = port
@@ -379,7 +382,7 @@ class DSAdmin(SimpleLDAPObject):
         the methods that deal with entries.  Instead of using a raw list of tuples
         of lists of hashes of arrays as the entry object, we want to wrap entries
         in an Entry class that provides some useful methods"""
-        for name in dir(self.__class__.__bases__[0]):
+        for name in dir(self._Superclass):
             attr = getattr(self, name)
             if callable(attr):# and type(attr) != type:
                 #log.debug("adding method %r to object" % attr)
@@ -596,6 +599,7 @@ class DSAdmin(SimpleLDAPObject):
         entries = self.search_s("cn=plugins,cn=config", ldap.SCOPE_SUBTREE,
                                 "(&(objectclass=nsBackendInstance)(|(nsslapd-suffix=%s)(nsslapd-suffix=%s)))" % (suffix, nsuffix),
                                 attrs)
+        self.log.debug("getBackendForSuffix: %r" % entries)
         return entries
 
     def getSuffixForBackend(self, bename, attrs=None):

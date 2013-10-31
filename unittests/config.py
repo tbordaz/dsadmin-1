@@ -44,16 +44,24 @@ def dfilter(my_dict, keys):
 class MyMockLDDAP(fakeldap.MockLDAP):
     def __init__(self, *args, **kwds):
         kwds['directory'] = {
-            lib389.DN_DM.lower(): {
+            'cn=directory manager': {
+                    'cn': 'directory manager',
                     "userPassword": "password"
             },
             'cn=config': {
+                'cn': 'config',
                 'nsslapd-errorlog': '0',
                 'nsslapd-instancedir': '/tmp/',
                 'nsslapd-certdir' : '/tmp/',
                 'nsslapd-schemadir' : '/tmp/',
                 'nsslapd-errorlog-level' : '0',
                 'nsslapd-accesslog-level' : '0',
+            },
+            'cn=plugins,cn=config': {
+                'cn': 'plugins'
+            },
+            'cn=ldbm database,cn=plugins,cn=config': {
+                'cn': 'ldbm database'
             }
             
         }

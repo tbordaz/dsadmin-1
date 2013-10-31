@@ -9,7 +9,7 @@ import ldap
 import time
 import sys
 import lib389
-from lib389 import DSAdmin, Entry
+from lib389 import Entry
 from lib389 import NoSuchEntryError
 from lib389 import utils
 from lib389.tools import DSAdminTools
