@@ -15,6 +15,14 @@ Test with:
  # sudo PYTHONPATH=$PYTHONPATH nosetests -w tests/
 
 
+Further steps for UnitTest with:
+ 
+ # git clone  https://github.com/ioggstream/fakeldap.git ~/fakeldap
+ # less ~/fakeldap/README.rst
+
+ # nosetests -w unittests/ config_test.py
+
+
 Debian/Ubuntu users may need to align their setup
 to the redhat one to run all tests (or edit test configuration)
 
