@@ -542,7 +542,7 @@ class Config(object):
 
     def loglevel(self, vals=(LOG_DEFAULT,), level='error', update=False):
         """Set the access or error log level.
-        @param vals - a list of log level codes (eg. lib389.LOG_*) 
+        @param vals - an integer or a list of log level codes (eg. lib389.LOG_*) 
                       defaults to LOG_DEFAULT
         @param level   -   'access' or 'error'
         @param update  - False for replace (default), True for update
@@ -550,6 +550,10 @@ class Config(object):
         ex. loglevel([lib389.LOG_DEFAULT, lib389.LOG_ENTRY_PARSER])
         """
         level = 'nsslapd-%slog-level' % level
+        # convert a single-valued attribute to an iterable
+        if not hasattr(vals , '__iter__'):
+            assert vals is not None, "set at least one log level"
+            vals = (vals,)
         assert len(vals) > 0, "set at least one log level"
         tot = 0
         for v in vals:

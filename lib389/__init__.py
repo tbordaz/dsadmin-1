@@ -169,6 +169,7 @@ class DSAdmin(SimpleLDAPObject):
             - confdir
 
         """
+        return
         if self.binddn and len(self.binddn) and not hasattr(self, 'sroot'):
             try:
                 # XXX this fields are stale and not continuously updated
@@ -221,8 +222,7 @@ class DSAdmin(SimpleLDAPObject):
     def __localinit__(self):
         uri = self.toLDAPURL()
 
-        SimpleLDAPObject.__init__(self, uri)
-
+        self.__class__.__bases__[0].__init__(self, uri)
         # see if binddn is a dn or a uid that we need to lookup
         if self.binddn and not is_a_dn(self.binddn):
             self.simple_bind_s("", "")  # anon
@@ -290,17 +290,16 @@ class DSAdmin(SimpleLDAPObject):
         self.nobind = nobind
         self.isLocal = isLocalHost(host)
         self.serverId = serverId
-        
         #
         # dict caching DS structure
         #
         self.suffixes = {}
         self.agmt = {}
-        # the real init
-        self.__localinit__()
         self.log = log
         # add brookers
         self.__add_brookers__()
+        # the real init
+        self.__localinit__()
 
         
     def __str__(self):
@@ -339,7 +338,7 @@ class DSAdmin(SimpleLDAPObject):
         restype, obj = self.result(res)
         # TODO: why not test restype?
         if not obj:
-            raise NoSuchEntryError("no such entry for %r" % [args])
+            raise NoSuchEntryError("no such entry for %r" % [args, kwds])
 
         log.info("Retrieved entry %r" % obj)
         if isinstance(obj, Entry):
@@ -382,7 +381,8 @@ class DSAdmin(SimpleLDAPObject):
         in an Entry class that provides some useful methods"""
         for name in dir(self.__class__.__bases__[0]):
             attr = getattr(self, name)
-            if callable(attr):
+            if callable(attr):# and type(attr) != type:
+                #log.debug("adding method %r to object" % attr)
                 setattr(self, name, wrapper(attr, name))
 
     def startTask(self, entry, verbose=False):

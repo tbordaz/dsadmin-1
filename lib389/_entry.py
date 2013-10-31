@@ -90,8 +90,15 @@ class Entry(object):
         return self.data.get(name, [])
 
     def getValue(self, name):
-        """Get the first value for the attribute named name"""
-        return self.data.get(name, [None])[0]
+        """Get the first value for the attribute named name
+        
+            Don't destroy string values
+        """
+        ret = self.data.get(name, [None])
+        if isinstance(ret, list) or isinstance(ret, tuple):
+            return ret[0]
+        else:
+            return ret
 
     def hasValue(self, name, val=None):
         """True if the given attribute is present and has the given value

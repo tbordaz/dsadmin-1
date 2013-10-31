@@ -261,11 +261,11 @@ class DSAdminTools(object):
         
             See DSAdmin.configSSL for the secargs values
         """
-        e = lib389.configSSL(secport, secargs)
+        e = dsadmin.configSSL(secport, secargs)
         log.info("entry is %r" % [e])
         dn_config = e.dn
         # get our cert dir
-        e_config = lib389.getEntry(
+        e_config = dsadmin.getEntry(
             dn_config, ldap.SCOPE_BASE, '(objectclass=*)')
         certdir = e_config.getValue('nsslapd-certdir')
         # have to stop the server before replacing any security files

@@ -236,5 +236,5 @@ def setupSSL_test():
     Popen(cmd_mkcert.split(), stdin=open("/dev/urandom"), stderr=fd_null)
 
     log.info("Testing ssl configuration")
-    ssl_args.update({'dsadmin': conn})
+    ssl_args.update({'lib389': conn})
     DSAdminTools.setupSSL(**ssl_args)
