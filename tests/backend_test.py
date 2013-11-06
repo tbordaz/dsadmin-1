@@ -19,7 +19,7 @@ import ldap
 import time
 import sys
 import lib389
-from lib389 import DSAdmin, Entry
+from lib389 import Entry
 from lib389 import NoSuchEntryError
 from lib389 import utils
 from lib389.tools import DSAdminTools
@@ -28,8 +28,8 @@ from random import randint
 from lib389.brooker import Replica
 from lib389 import MASTER_TYPE, DN_MAPPING_TREE, DN_CHANGELOG, DN_LDBM
 # Test harnesses
-from lib389_test import drop_backend, addbackend_harn
-from lib389_test import drop_added_entries
+from tests.harnesses import drop_backend, addbackend_harn, drop_added_entries, harn_nolog
+
 
 conn = None
 added_entries = None

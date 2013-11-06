@@ -5,6 +5,7 @@
 
 # Packages
 *.egg
+*.zip
 *.egg-info
 dist
 build
@@ -33,6 +34,9 @@ nosetests.xml
 .mr.developer.cfg
 .project
 .pydevproject
+
+# Other
+*.pem
 
 # Log directory   #
 ###################

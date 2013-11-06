@@ -125,7 +125,8 @@ def wrapper(f, name):
 
                     return objtype, [Entry(x) for x in data]
                 else:
-                    raise TypeError("unknown data type %s returned by result" %
+                    log.error("Cannot manage entry %r" % data)
+                    raise TypeError("Unmanaged data type %s returned by result" %
                                     type(data))
             else:
                 return objtype, data
@@ -151,7 +152,7 @@ class DSAdmin(SimpleLDAPObject):
         """Return a given attribute from dse.ldif.
             TODO can we take it from "cn=config" ?
         """
-        conffile = self.confdir + '/dse.ldif'
+        conffile = os.path.join(self.config.get('nsslapd-certdir'), 'dse.ldif')
         try:
             dse_ldif = LDIFConn(conffile)
             cnconfig = dse_ldif.get(DN_CONFIG)
@@ -170,6 +171,7 @@ class DSAdmin(SimpleLDAPObject):
 
         """
         return
+        """
         if self.binddn and len(self.binddn) and not hasattr(self, 'sroot'):
             try:
                 # XXX this fields are stale and not continuously updated
@@ -218,7 +220,7 @@ class DSAdmin(SimpleLDAPObject):
             except ldap.LDAPError, e:
                 log.exception("Error during initialization")
                 raise
-
+        """
     def __localinit__(self):
         uri = self.toLDAPURL()
 
@@ -341,7 +343,7 @@ class DSAdmin(SimpleLDAPObject):
         restype, obj = self.result(res)
         # TODO: why not test restype?
         if not obj:
-            raise NoSuchEntryError("no such entry for %r" % [args, kwds])
+            raise NoSuchEntryError("no such entry for %r" % [args, kwargs])
 
         log.info("Retrieved entry %r" % obj)
         if isinstance(obj, Entry):
@@ -609,6 +611,7 @@ class DSAdmin(SimpleLDAPObject):
             entry = self.getEntry("cn=plugins,cn=config", ldap.SCOPE_SUBTREE,
                                   "(&(objectclass=nsBackendInstance)(cn=%s))" % bename,
                                   ['nsslapd-suffix'])
+            
             suffix = entry.getValue('nsslapd-suffix')
             return self.getMTEntry(suffix, attrs)
         except NoSuchEntryError:
@@ -651,6 +654,7 @@ class DSAdmin(SimpleLDAPObject):
         # no backends for this suffix yet - create one
         if not entries_backend:
             # if not bename, self.setupBackend raises
+            # setupBackend -> to self.backend.add()
             bename = self.setupBackend(
                 suffix, binddn, bindpw, urls, benamebase=bename, attrvals=beattrs)
         else:  # use existing backend(s)
@@ -659,6 +663,7 @@ class DSAdmin(SimpleLDAPObject):
 
         try:
             parent = self.findParentSuffix(suffix)
+            # setupSuffix -> backend.setup_mt()
             return self.setupSuffix(suffix, bename, parent)
         except NoSuchEntryError:
             log.exception(

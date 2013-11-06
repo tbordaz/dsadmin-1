@@ -11,7 +11,7 @@ except ImportError:
     HASPOPEN = False
 
 import sys
-import os
+import os, re
 import os.path
 import base64
 import urllib
@@ -23,7 +23,7 @@ import time
 import shutil
 
 import lib389
-from lib389 import InvalidArgumentError
+from lib389 import InvalidArgumentError, NoSuchEntryError, DN_CONFIG, DN_LDBM
 
 from lib389.utils import (
     getcfgdsuserdn, 
@@ -50,6 +50,64 @@ PATH_ADM_CONF = "/etc/dirsrv/admin-serv/adm.conf"
 
 class DSAdminTools(object):
     """DSAdmin mix-in."""
+
+    @staticmethod
+    def initialize_dsadmin_for_tools(self):
+        """Initialize the DSAdmin structure filling various fields, like:
+            - dbdir
+            - errlog
+            - confdir
+
+        """
+        if self.binddn and len(self.binddn) and not hasattr(self, 'sroot'):
+            try:
+                # XXX this fields are stale and not continuously updated
+                # do they have sense?
+                ent = self.getEntry(DN_CONFIG, attrlist=[
+                    'nsslapd-instancedir', 
+                    'nsslapd-errorlog',
+                    'nsslapd-certdir', 
+                    'nsslapd-schemadir'])
+                self.errlog = ent.getValue('nsslapd-errorlog')
+                self.confdir = ent.getValue('nsslapd-certdir')
+                
+                if self.isLocal:
+                    if not self.confdir or not os.access(self.confdir + '/dse.ldif', os.R_OK):
+                        self.confdir = ent.getValue('nsslapd-schemadir')
+                        if self.confdir:
+                            self.confdir = os.path.dirname(self.confdir)
+                instdir = ent.getValue('nsslapd-instancedir')
+                if not instdir and self.isLocal:
+                    # get instance name from errorlog
+                    # move re outside
+                    self.inst = re.match(
+                        r'(.*)[\/]slapd-([^/]+)/errors', self.errlog).group(2)
+                    if self.isLocal and self.confdir:
+                        instdir = self.getDseAttr('nsslapd-instancedir')
+                    else:
+                        instdir = re.match(r'(.*/slapd-.*)/logs/errors',
+                                           self.errlog).group(1)
+                if not instdir:
+                    instdir = self.confdir
+                if self.verbose:
+                    log.debug("instdir=%r" % instdir)
+                    log.debug("Entry: %r" % ent)
+                match = re.match(r'(.*)[\/]slapd-([^/]+)$', instdir)
+                if match:
+                    self.sroot, self.inst = match.groups()
+                else:
+                    self.sroot = self.inst = ''
+                ent = self.getEntry('cn=config,' + DN_LDBM,
+                    attrlist=['nsslapd-directory'])
+                self.dbdir = os.path.dirname(ent.getValue('nsslapd-directory'))
+            except (ldap.INSUFFICIENT_ACCESS, ldap.CONNECT_ERROR, NoSuchEntryError):
+                log.exception("Skipping exception during initialization")
+            except ldap.OPERATIONS_ERROR, e:
+                log.exception("Skipping exception: Probably Active Directory")
+            except ldap.LDAPError, e:
+                log.exception("Error during initialization")
+                raise
+
 
     @staticmethod
     def cgiFake(sroot, verbose, prog, args):
@@ -223,6 +281,7 @@ class DSAdminTools(object):
     @staticmethod
     def stop(self, verbose=False, timeout=0):
         """Stop server or raise."""
+        DSAdminTools.initialize_dsadmin_for_tools(self)
         if not self.isLocal and hasattr(self, 'asport'):
             log.info("stopping remote server ", self)
             self.unbind()
@@ -239,6 +298,8 @@ class DSAdminTools(object):
 
     @staticmethod
     def start(self, verbose=False, timeout=0):
+        DSAdminTools.initialize_dsadmin_for_tools(self)
+
         if not self.isLocal and hasattr(self, 'asport'):
             log.debug("starting remote server %s " % self)
             cgiargs = {}
@@ -261,6 +322,7 @@ class DSAdminTools(object):
         
             See DSAdmin.configSSL for the secargs values
         """
+        DSAdminTools.initialize_dsadmin_for_tools(dsadmin)
         e = dsadmin.configSSL(secport, secargs)
         log.info("entry is %r" % [e])
         dn_config = e.dn

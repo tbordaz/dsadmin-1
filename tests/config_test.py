@@ -14,10 +14,8 @@ from config import log
 from config import *
 
 import lib389
-from lib389 import DSAdmin, Entry
 # Test harnesses
-from lib389_test import drop_backend, addbackend_harn
-from lib389_test import drop_added_entries
+from tests.harnesses import drop_backend, addbackend_harn, drop_added_entries
 
 conn = None
 added_entries = None
@@ -79,3 +77,7 @@ def access_loglevel_test():
     vals = [lib389.LOG_CACHE, lib389.LOG_REPLICA, lib389.LOG_CONNECT]
     assert conn.config.loglevel(vals, level='access') == sum(vals)
 
+
+def backend_config_test():
+    basedir = conn.backend.config.get('nsslapd-directory')
+    assert basedir, "Missing basedir in ldbm backend"

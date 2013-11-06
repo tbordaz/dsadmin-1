@@ -1,54 +1,29 @@
-import logging
-import lib389
-from lib389 import DSAdmin
+"""
+    UnitTesting config.py
+
+"""
+from tests.config import *
 import fakeldap
 
-logging.basicConfig(level=logging.DEBUG)
-log = logging.getLogger(__name__)
-
-DN_RMANAGER = 'uid=rmanager,cn=config'
-
-auth = {'host': 'localhost',
-        'port': 22389,
-        'binddn': 'cn=directory manager',
-        'bindpw': 'password'}
-
-
-class MockDSAdmin(object):
-    host = 'localhost'
-    port = 22389
-    sslport = 0
-
-    def __str__(self):
-        if self.sslport:
-            return 'ldaps://%s:%s' % (self.host, self.sslport)
-        else:
-            return 'ldap://%s:%s' % (self.host, self.port)
-
-
-def expect(entry, name, value):
-    assert entry, "Bad entry %r " % entry
-    assert entry.getValue(name) == value, "Bad value for entry %s. Expected %r vs %r" % (entry, entry.getValue(name), value)
-
-
-def entry_equals(e1, e2):
-    """compare using str()"""
-    return str(e1) == str(e2)
-
-
-def dfilter(my_dict, keys):
-    """Filter a dict in a 2.4-compatible way"""
-    return dict([(k, v) for k, v in my_dict.iteritems() if k in keys])
-
-
 class MyMockLDDAP(fakeldap.MockLDAP):
+    def set_empty_suffix(self, suffix):
+        # Searching for missing backends should return an empty list
+        self.set_return_value('search_s', 
+            ('cn=plugins,cn=config', 
+                ldap.SCOPE_SUBTREE, 
+                '(&(objectclass=nsBackendInstance)(|(nsslapd-suffix={suffix})(nsslapd-suffix={suffix})))'.format(suffix=suffix), 
+                'cn', 
+                0),
+            []
+        )
+
     def __init__(self, *args, **kwds):
         kwds['directory'] = {
             'cn=directory manager': {
                     'cn': 'directory manager',
                     "userPassword": "password"
             },
-            'cn=config': {
+            lib389.DN_CONFIG: {
                 'cn': 'config',
                 'nsslapd-errorlog': '0',
                 'nsslapd-instancedir': '/tmp/',
@@ -57,14 +32,25 @@ class MyMockLDDAP(fakeldap.MockLDAP):
                 'nsslapd-errorlog-level' : '0',
                 'nsslapd-accesslog-level' : '0',
             },
+            # This tree avoids NO_SUCH_ENTRY when searching on backends
             'cn=plugins,cn=config': {
                 'cn': 'plugins'
             },
             'cn=ldbm database,cn=plugins,cn=config': {
                 'cn': 'ldbm database'
+            },
+            lib389.DN_MAPPING_TREE : {
+                'cn': 'mapping tree'            
+            },
+            'cn=config,cn=ldbm database,cn=plugins,cn=config': {
+                'cn': 'config',
+                'nsslapd-directory': '/tmp/foo'
             }
             
         }
         fakeldap.MockLDAP.__init__(self, *args, **kwds)
 
+#
+# monkeypatch the base class of DSAdmin
+#
 DSAdmin.__bases__ = (MyMockLDDAP, )

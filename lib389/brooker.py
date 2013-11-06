@@ -62,7 +62,8 @@ class Replica(object):
             otherwise it's relative to self.dbdir
         """
         dn = DN_CHANGELOG
-        dirpath = os.path.join(self.conn.dbdir, dbname)
+        dbdir = os.path.dirname(self.conn.backend.config.get('nsslapd-directory'))
+        dirpath = os.path.join(dbdir, dbname)
         entry = Entry(dn)
         entry.update({
             'objectclass': ("top", "extensibleobject"),
@@ -520,10 +521,11 @@ class Config(object):
         - set access and error logging
         - get and set "cn=config" attributes
     """
-    def __init__(self, conn):
+    def __init__(self, conn, basedn=DN_CONFIG):
         """@param conn - a DSAdmin instance """
         self.conn = conn
         self.log = conn.log
+        self.basedn = basedn
         
     def set(self, key, value):
         """Set a parameter under cn=config
@@ -533,12 +535,12 @@ class Config(object):
             eg. set('passwordExp', 'on')
         """
         self.log.debug("set(%r, %r)" % (key, value))
-        return self.conn.modify(DN_CONFIG,
+        return self.conn.modify(self.basedn,
             [(ldap.MOD_REPLACE, key, value)])
             
     def get(self, key):
         """Get an attribute under cn=config"""
-        return self.conn.getEntry(DN_CONFIG).__getattr__(key)
+        return self.conn.getEntry(self.basedn).__getattr__(key)
 
     def loglevel(self, vals=(LOG_DEFAULT,), level='error', update=False):
         """Set the access or error log level.
@@ -549,6 +551,7 @@ class Config(object):
         
         ex. loglevel([lib389.LOG_DEFAULT, lib389.LOG_ENTRY_PARSER])
         """
+        assert self.basedn == DN_CONFIG, "Unsupported operation on %r" % self.basedn
         level = 'nsslapd-%slog-level' % level
         # convert a single-valued attribute to an iterable
         if not hasattr(vals , '__iter__'):
@@ -576,6 +579,7 @@ class Config(object):
                 'nsSSLPersonalitySSL': 'Server-Cert'
             }
         """
+        assert self.basedn == DN_CONFIG, "Unsupported operation on %r" % self.basedn
         self.log.debug("configuring SSL with secargs:%r" % secargs)
         secargs = secargs or {}
 
@@ -626,6 +630,7 @@ class Backend(object):
         """@param conn - a DSAdmin instance"""
         self.conn = conn
         self.log = conn.log
+        self.config = Config(conn, ','.join((DN_CONFIG, DN_LDBM)))
 
     def __getattr__(self, name):
         if name in Replica.proxied_methods:
@@ -844,3 +849,6 @@ class Backend(object):
             raise NotImplementedError()
             return [x.dn.replace("\3D","=").replace("\2C",",") for x in suffixes]
         return [x.dn for x in suffixes]
+
+
+    

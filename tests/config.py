@@ -1,4 +1,7 @@
 import logging
+import lib389
+from lib389 import DSAdmin
+
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
