@@ -21,6 +21,10 @@ import operator
 import select
 import time
 import shutil
+import subprocess
+import tarfile
+import re
+import glob
 
 import lib389
 from lib389 import InvalidArgumentError, NoSuchEntryError, DN_CONFIG, DN_LDBM
@@ -46,6 +50,7 @@ log = logging.getLogger(__name__)
 # Private constants
 PATH_SETUP_DS_ADMIN = "/setup-ds-admin.pl"
 PATH_SETUP_DS = "/setup-ds.pl"
+PATH_REMOVE_DS = "/remove-ds.pl"
 PATH_ADM_CONF = "/etc/dirsrv/admin-serv/adm.conf"
 
 class DSAdminTools(object):
@@ -225,7 +230,11 @@ class DSAdminTools(object):
         timeout += int(time.time())
         if cmd == 'stop':
             log.warn("unbinding before stop")
-            self.unbind()
+            try:
+                self.unbind()
+            except:
+                log.warn("Unbinding fails: Instance already down (stopped or killed) ?")
+                pass
 
         log.info("Setup error log")
         logfp = open(errLog, 'r')
@@ -315,7 +324,203 @@ class DSAdminTools(object):
         else:
             log.debug("Starting server %r" % self)
             return DSAdminTools.serverCmd(self, 'start', verbose, timeout)
+        
+    @staticmethod
+    def _infoInstanceBackupFS(dsadmin):
+        """
+            Return the information to retrieve the backup file of a given instance
+            It returns:
+                - Directory name containing the backup (e.g. /tmp/slapd-standalone.bck)
+                - The pattern of the backup files (e.g. /tmp/slapd-standalone.bck/backup*.tar.gz)
+        """
+        backup_dir = "%s/slapd-%s.bck" % (dsadmin.backupdir, dsadmin.inst)     
+        backup_pattern = os.path.join(backup_dir, "backup*.tar.gz") 
+        return backup_dir, backup_pattern
+    
+    @staticmethod
+    def clearInstanceBackupFS(dsadmin=None, backup_file=None):
+        """
+            Remove a backup_file or all backup up of a given instance
+        """
+        if backup_file:
+            if os.path.isfile(backup_file):
+                try:
+                    os.remove(backup_file)
+                except:
+                    log.info("clearInstanceBackupFS: fail to remove %s" % backup_file)
+                    pass
+        elif dsadmin:
+            backup_dir, backup_pattern = DSAdminTools._infoInstanceBackupFS(dsadmin)
+            list_backup_files = glob.glob(backup_pattern)
+            for f in list_backup_files:
+                try:
+                    os.remove(f)
+                except:
+                    log.info("clearInstanceBackupFS: fail to remove %s" % backup_file)
+                    pass
 
+    @staticmethod
+    def checkInstanceBackupFS(dsadmin):
+        """
+            If it exits a backup file, it returns it
+            else it returns None
+        """
+
+        backup_dir, backup_pattern = DSAdminTools._infoInstanceBackupFS(dsadmin)
+        list_backup_files = glob.glob(backup_pattern)
+        if not list_backup_files:
+            return None
+        else:
+            # returns the first found backup
+            return list_backup_files[0]
+
+        
+    @staticmethod
+    def instanceBackupFS(dsadmin):
+        """
+            Saves the files of an instance under /tmp/slapd-<instance_name>.bck/backup_HHMMSS.tar.gz
+            and return the archive file name.
+            If it already exists a such file, it assums it is a valid backup and 
+            returns its name
+            
+            dsadmin.sroot : root of the instance  (e.g. /usr/lib64/dirsrv)
+            dsadmin.inst  : instance name (e.g. standalone for /etc/dirsrv/slapd-standalone)
+            dsadmin.confdir : root of the instance config (e.g. /etc/dirsrv)
+            dsadmin.dbdir: directory where is stored the database (e.g. /var/lib/dirsrv/slapd-standalone/db)
+            dsadmin.changelogdir: directory where is stored the changelog (e.g. /var/lib/dirsrv/slapd-master/changelogdb)
+        """
+        
+        # First check it if already exists a backup file
+        backup_dir, backup_pattern = DSAdminTools._infoInstanceBackupFS(dsadmin)
+        backup_file = DSAdminTools.checkInstanceBackupFS(dsadmin)
+        if backup_file is None:
+            if not os.path.exists(backup_dir):
+                os.makedirs(backup_dir)
+        else:
+            return backup_file
+                
+        # goes under the directory where the DS is deployed
+        listFilesToBackup = []
+        here = os.getcwd()
+        os.chdir(dsadmin.prefix)
+        prefix_pattern = "%s/" % dsadmin.prefix
+        
+        # build the list of directories to scan
+        instroot = "%s/slapd-%s" % (dsadmin.sroot, dsadmin.inst)
+        ldir = [ instroot ]
+        if hasattr(dsadmin, 'confdir'):
+            ldir.append(dsadmin.confdir)
+        if hasattr(dsadmin, 'dbdir'):
+            ldir.append(dsadmin.dbdir)
+        if hasattr(dsadmin, 'changelogdir'):
+            ldir.append(dsadmin.changelogdir)
+        if hasattr(dsadmin, 'errlog'):
+            ldir.append(os.path.dirname(dsadmin.errlog))
+        if hasattr(dsadmin, 'accesslog') and  os.path.dirname(dsadmin.accesslog) not in ldir:
+            ldir.append(os.path.dirname(dsadmin.accesslog))        
+
+        # now scan the directory list to find the files to backup
+        for dirToBackup in ldir:
+            for root, dirs, files in os.walk(dirToBackup):
+                for file in files:
+                    name = os.path.join(root, file)
+                    name = re.sub(prefix_pattern, '', name)
+
+                    if os.path.isfile(name):
+                        listFilesToBackup.append(name)
+                        log.debug("instanceBackupFS add = %s (%s)" % (name, dsadmin.prefix))
+                
+        
+        # create the archive
+        name = "backup_%s.tar.gz" % (time.strftime("%m%d%Y_%H%M%S"))
+        backup_file = os.path.join(backup_dir, name)
+        tar = tarfile.open(backup_file, "w:gz")
+
+        
+        for name in listFilesToBackup:
+            if os.path.isfile(name):
+                tar.add(name)
+        tar.close()
+        log.info("instanceBackupFS: archive done : %s" % backup_file)
+        
+        # return to the directory where we were
+        os.chdir(here)
+        
+        return backup_file
+
+    @staticmethod
+    def instanceRestoreFS(dsadmin, backup_file):
+        """
+        """
+        
+        # First check the archive exists
+        if backup_file is None:
+            log.warning("Unable to restore the instance (missing backup)")
+            return 1
+        if not os.path.isfile(backup_file):
+            log.warning("Unable to restore the instance (%s is not a file)" % backup_file)
+            return 1
+        
+        #
+        # Second do some clean up 
+        #
+        
+        # previous db (it may exists new db files not in the backup)
+        log.debug("instanceRestoreFS: remove subtree %s/*" % dsadmin.dbdir)
+        for root, dirs, files in os.walk(dsadmin.dbdir):
+            for d in dirs:
+                if d not in ("bak", "ldif"):
+                    log.debug("instanceRestoreFS: before restore remove directory %s/%s" % (root, d))
+                    shutil.rmtree("%s/%s" % (root, d))
+        
+        # previous error/access logs
+        log.debug("instanceRestoreFS: remove error logs %s" % dsadmin.errlog)
+        for f in glob.glob("%s*" % dsadmin.errlog):
+                log.debug("instanceRestoreFS: before restore remove file %s" % (f))
+                os.remove(f)
+        log.debug("instanceRestoreFS: remove access logs %s" % dsadmin.accesslog)
+        for f in glob.glob("%s*" % dsadmin.accesslog):
+                log.debug("instanceRestoreFS: before restore remove file %s" % (f))
+                os.remove(f)
+        
+        
+        # Then restore from the directory where DS was deployed
+        here = os.getcwd()
+        os.chdir(dsadmin.prefix)
+        
+        tar = tarfile.open(backup_file)
+        for member in tar.getmembers():
+            if os.path.isfile(member.name):
+                #
+                # restore only writable files
+                # It could be a bad idea and preferably restore all.
+                # Now it will be easy to enhance that function.
+                if os.access(member.name, os.W_OK):
+                    log.debug("instanceRestoreFS: restored %s" % member.name)
+                    tar.extract(member.name)
+                else:
+                    log.debug("instanceRestoreFS: not restored %s (no write access)" % member.name)
+            else:
+                log.debug("instanceRestoreFS: restored %s" % member.name)
+                tar.extract(member.name)
+            
+        tar.close()
+        
+        #
+        # Now be safe, triggers a recovery at restart
+        #
+        guardian_file = os.path.join(dsadmin.dbdir, "db/guardian")
+        if os.path.isfile(guardian_file):
+            try:
+                log.debug("instanceRestoreFS: remove %s" % guardian_file)
+                os.remove(guardian_file)
+            except:
+                log.warning("instanceRestoreFS: fail to remove %s" % guardian_file)
+                pass
+        
+        
+        os.chdir(here)
+        
     @staticmethod
     def setupSSL(dsadmin, secport=636, sourcedir=None, secargs=None):
         """configure and setup SSL with a given certificate and restart the server.
@@ -406,8 +611,60 @@ class DSAdminTools(object):
             os.system(cmd)
         except:
             log.exception("error executing %r" % cmd)
+            
+    @staticmethod
+    def _offlineDSAdmin(args):
+        '''
+            Function to allocate an offline DSAdmin instance.
+            This instance is not initialized with the Directory instance
+            (__localinit__() and __add_brookers__() are not called)
+            The properties set are:
+                instance.host
+                instance.port
+                instance.serverId
+                instance.inst
+                instance.prefix
+                instance.backup
+        '''
+        instance = lib389.DSAdmin(host=args['newhost'], port=args['newport'], 
+                                 serverId=args['newinstance'], offline=True)
+        instance.prefix    = args.get('prefix', '/')
+        instance.backupdir = args.get('backupdir', '/tmp')
+        instance.inst      = instance.serverId
+        return instance
+            
+    @staticmethod
+    def existsBackup(args):
+        '''
+            If the backup of the instance exists, it returns it.
+            Else None
+        '''
+        instance = DSAdminTools._offlineDSadmin(args)
+        return DSAdminTools.checkInstanceBackupFS(instance)
+        
   
-    
+    @staticmethod
+    def existsInstance(args):
+        '''
+            Check if an instance exists.
+            It checks if the following directories/files exist:
+                <confdir>/slapd-<name>
+                <errlog>         
+            If it exists it returns a DSAdmin instance NOT initialized, else None
+        '''
+        instance = DSAdminTools._offlineDSAdmin(args)
+        dirname  = os.path.join(instance.prefix, "etc/dirsrv/slapd-%s" % instance.serverId)
+        errorlog = os.path.join(instance.prefix, "var/log/dirsrv/slapd-%s/errors" % instance.serverId)
+        sroot    = os.path.join(instance.prefix, "lib/dirsrv")
+        if  os.path.isdir(dirname) and \
+            os.path.isfile(errorlog) and \
+            os.path.isdir(sroot):
+            instance.sroot = sroot
+            instance.errlog = errorlog
+            return instance
+        
+        return None
+
     @staticmethod
     def createInstance(args, verbose=0):
         """Create a new instance of directory server and return a connection to it.
@@ -428,6 +685,9 @@ class DSAdminTools(object):
             # optionally register instance on an admin tree
             'have_admin': True,
             
+            # optionally directory where to store instance backup
+            'backupdir': [ /tmp ]
+            
             # you can configure a new dirsrv-admin
             'setup_admin': True,
             
@@ -445,6 +705,9 @@ class DSAdminTools(object):
         # use prefix if binaries are relocated
         sroot = args.get('sroot', '')
         prefix = args.setdefault('prefix', '')
+        
+        # get the backup directory to store instance backup
+        backupdir = args.get('backupdir', '/tmp')
 
         # new style - prefix or FHS?
         args['new_style'] = not args.get('sroot')
@@ -513,6 +776,8 @@ class DSAdminTools(object):
         try:
             newconn = lib389.DSAdmin(args['newhost'], args['newport'],
                               args['newrootdn'], args['newrootpw'], args['newinstance'])
+            newconn.prefix = prefix
+            newconn.backupdir = backupdir
             newconn.isLocal = isLocal
             if args['have_admin'] and not args['setup_admin']:
                 newconn.asport = asport
