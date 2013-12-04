@@ -20,18 +20,8 @@ from lib389 import (
     NoSuchEntryError
 )
 
-from lib389._constants import (
-    DN_CHANGELOG,
-    DN_MAPPING_TREE,
-    DN_CHAIN, DN_LDBM,
-    MASTER_TYPE,
-    HUB_TYPE,
-    LEAF_TYPE,
-    REPLICA_RDONLY_TYPE,
-    REPLICA_RDWR_TYPE
-)
 
-from lib389._replication import RUV, CSN
+from lib389._replication import RUV
 from lib389._entry import FormatDict
 
 class Agreement(object):
@@ -459,13 +449,9 @@ class Agreement(object):
             # use schedule hack
             self.schedule(interval)
 
-            
     
 class Replica(object):
     proxied_methods = 'search_s getEntry'.split()
-    STOP = '2358-2359 0'
-    START = '0000-2359 0123456'
-    ALWAYS = None
 
     def __init__(self, conn):
         """@param conn - a DSAdmin instance"""
@@ -635,14 +621,14 @@ class Replica(object):
 
     
 
-    def add(self, suffix, binddn, bindpw=None, rtype=REPLICA_RDONLY_TYPE, rid=None, tombstone_purgedelay=None, purgedelay=None, referrals=None, legacy=False):
+    def add(self, suffix, binddn, bindpw=None, role=None, rid=None, tombstone_purgedelay=None, purgedelay=None, referrals=None, legacy=False):
         """Setup a replica entry on an existing suffix.
             @param suffix - dn of suffix
             @param binddn - the replication bind dn for this replica
                             can also be a list ["cn=r1,cn=config","cn=r2,cn=config"]
             @param bindpw - used to eventually provision the replication entry
 
-            @param rtype - REPLICA_RDWR_TYPE (master) or REPLICA_RDONLY_TYPE (hub/consumer)
+            @param role - REPLICAROLE_MASTER, REPLICAROLE_HUB or REPLICAROLE_CONSUMER
             @param rid - replica id or - if not given - an internal sequence number will be assigned
 
             # further args
@@ -659,8 +645,17 @@ class Replica(object):
              binddn
             TODO: this method does not update replica type
         """
-        # set default values
-        if rtype == MASTER_TYPE:
+        # Check validity of role
+        if not role:
+            self.log.fatal("Replica.create: replica role not specify (REPLICAROLE_*)")
+            raise ValueError("role missing")
+
+        if role != REPLICAROLE_MASTER and role != REPLICAROLE_HUB and role != REPLICAROLE_CONSUMER:
+            self.log.fatal("enableReplication: replica role invalid (%s) " % role)
+            raise ValueError("invalid role: %s" % role)
+        
+        # role is fine, set the replica type
+        if role == REPLICAROLE_MASTER:
             rtype = REPLICA_RDWR_TYPE
         else:
             rtype = REPLICA_RDONLY_TYPE
@@ -700,7 +695,7 @@ class Replica(object):
             'nsds5replicalegacyconsumer': legacy,
             'nsds5replicabinddn': binddnlist
         })
-        if rtype != LEAF_TYPE:
+        if role != REPLICAROLE_CONSUMER:
             entry.setValues('nsds5flags', "1")
 
         # other args
@@ -1051,6 +1046,8 @@ class Backend(object):
         """
         attrvals = attrvals or {}
         dnbase = ""
+        backend_entry = None
+        suffix_entry = None
 
         # figure out what type of be based on args
         if binddn and bindpw and urls:  # its a chaining be

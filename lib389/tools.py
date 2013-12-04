@@ -539,9 +539,16 @@ class DSAdminTools(object):
         DSAdminTools.stop(dsadmin)
         # allow secport for selinux
         if secport != 636:
-            log.debug("Configuring SELinux on port:", secport)
-            cmd = 'semanage port -a -t ldap_port_t -p tcp %s' % secport
-            os.system(cmd)
+            try:
+                log.debug("Configuring SELinux on port: %s", str(secport))
+                
+                subprocess.check_call([ "semanage", "port", "-a", "-t", "ldap_port_t", "-p", "tcp", str(secport) ])
+            except OSError:
+                log.debug("Likely SELinux not supported")
+                pass
+            except subprocess.CalledProcessError:
+                log.debug("SELinux fails to configure")
+                pass
 
         # eventually copy security files from source dir to our cert dir
         if sourcedir:            
@@ -605,8 +612,14 @@ class DSAdminTools(object):
     @staticmethod
     def removeInstance(instance):
         """run the remove instance command"""
-        cmd = "/usr/bin/sudo /usr/bin/perl /usr/sbin/remove-ds.pl -i slapd-%s" % instance
-        #print "running: %s " % cmd
+        if hasattr(instance, 'prefix'):
+            prefix = instance.prefix
+        else:
+            prefix = None
+        
+        prog = get_sbin_dir(None, prefix) + PATH_REMOVE_DS
+        cmd = "%s -i slapd-%s" % (prog, instance.serverId)
+        log.debug("running: %s " % cmd)
         try:
             os.system(cmd)
         except:
@@ -844,6 +857,8 @@ class DSAdminTools(object):
 
         newconn = lib389.DSAdmin(args['newhost'], args['newport'],
                           args['newrootdn'], args['newrootpw'], args['newinstance'])
+        newconn.prefix = prefix
+        newconn.backupdir = backupdir
         newconn.isLocal = isLocal
         # Now the admin should have been created
         # but still I should have taken all the required infos
